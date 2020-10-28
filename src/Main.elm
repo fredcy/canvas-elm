@@ -4,12 +4,12 @@ import Browser
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Http
-import Json.Decode
-import RemoteData
+import Json.Decode as D
+import RemoteData exposing (WebData, RemoteData(..), fromResult)
 
 
 type alias Flags =
-    Json.Decode.Value
+    D.Value
 
 
 type alias Token =
@@ -23,8 +23,8 @@ type alias Authentication =
 
 
 type alias Model =
-    { authentication : Result Json.Decode.Error Authentication
-    , auth_providers : RemoteData.WebData (List AuthProvider)
+    { authentication : Result D.Error Authentication
+    , auth_providers : WebData (List AuthProvider)
     }
 
 
@@ -42,7 +42,7 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         authResult =
-            Json.Decode.decodeValue flagsDecoder flags
+            D.decodeValue flagsDecoder flags
 
         cmd =
             case authResult of
@@ -55,24 +55,24 @@ init flags =
         auth_providers =
             case authResult of
                 Ok _ ->
-                    RemoteData.Loading
+                    Loading
 
                 Err _ ->
-                    RemoteData.NotAsked
+                    NotAsked
     in
     ( { authentication = authResult, auth_providers = auth_providers }, cmd )
 
 
-flagsDecoder : Json.Decode.Decoder Authentication
+flagsDecoder : D.Decoder Authentication
 flagsDecoder =
-    Json.Decode.map2 Authentication
-        (Json.Decode.field "access_token" Json.Decode.string)
-        (Json.Decode.at [ "user", "name" ] Json.Decode.string)
+    D.map2 Authentication
+        (D.field "access_token" D.string)
+        (D.at [ "user", "name" ] D.string)
 
 
 type Msg
     = NoOp
-    | GotAuthProviders (RemoteData.WebData (List AuthProvider))
+    | GotAuthProviders (WebData (List AuthProvider))
 
 
 update : Msg -> Model -> ( Model, Cmd msg )
@@ -108,12 +108,12 @@ type alias AuthProvider =
     }
 
 
-authProviderDecoder : Json.Decode.Decoder AuthProvider
+authProviderDecoder : D.Decoder AuthProvider
 authProviderDecoder =
-    Json.Decode.map3 AuthProvider
-        (Json.Decode.field "id" Json.Decode.int)
-        (Json.Decode.field "auth_type" Json.Decode.string)
-        (Json.Decode.field "position" Json.Decode.int)
+    D.map3 AuthProvider
+        (D.field "id" D.int)
+        (D.field "auth_type" D.string)
+        (D.field "position" D.int)
 
 
 proxyURL =
@@ -130,11 +130,11 @@ requestAuthProviders token =
             ]
         , url = proxyURL ++ "/api/v1/accounts/1/authentication_providers"
         , body = Http.emptyBody
-        , expect = Http.expectJson (RemoteData.fromResult >> GotAuthProviders) (Json.Decode.list authProviderDecoder)
+        , expect = Http.expectJson (fromResult >> GotAuthProviders) (D.list authProviderDecoder)
         , timeout = Nothing
         , tracker = Nothing
         }
 
-viewAuthProviders : RemoteData.WebData (List AuthProvider) -> Html Msg
+viewAuthProviders : WebData (List AuthProvider) -> Html Msg
 viewAuthProviders providersWD =
     div [] [ text (Debug.toString providersWD) ]
