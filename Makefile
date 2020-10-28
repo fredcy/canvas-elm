@@ -13,4 +13,4 @@ index.html: index.html.tmpl $(AUTHFILE)
 	python3 mk_index.py > index.html
 
 watch:
-	fswatch src/*.elm index.html | while read f; do echo $$f; make build; done
+	fswatch src/*.elm | while read f; do echo $$f; make build; done
