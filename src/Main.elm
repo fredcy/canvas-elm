@@ -5,6 +5,7 @@ import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Http
 import Json.Decode
+import RemoteData
 
 
 type alias Flags =
@@ -22,7 +23,9 @@ type alias Authentication =
 
 
 type alias Model =
-    Result Json.Decode.Error Authentication
+    { authentication : Result Json.Decode.Error Authentication
+    , auth_providers : RemoteData.WebData (List AuthProvider)
+    }
 
 
 main : Program Flags Model Msg
@@ -38,18 +41,26 @@ main =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
-        model =
+        authResult =
             Json.Decode.decodeValue flagsDecoder flags
 
         cmd =
-            case model of
+            case authResult of
                 Ok auth ->
                     requestAuthProviders auth.access_token
 
                 Err _ ->
                     Cmd.none
+
+        auth_providers =
+            case authResult of
+                Ok _ ->
+                    RemoteData.Loading
+
+                Err _ ->
+                    RemoteData.NotAsked
     in
-    ( model, cmd )
+    ( { authentication = authResult, auth_providers = auth_providers }, cmd )
 
 
 flagsDecoder : Json.Decode.Decoder Authentication
@@ -61,7 +72,7 @@ flagsDecoder =
 
 type Msg
     = NoOp
-    | GotAuthProviders (Result Http.Error String)
+    | GotAuthProviders (RemoteData.WebData (List AuthProvider))
 
 
 update : Msg -> Model -> ( Model, Cmd msg )
@@ -75,7 +86,7 @@ update msg model =
             ( model, Cmd.none )
 
         GotAuthProviders r ->
-            ( model, Cmd.none )
+            ( { model | auth_providers = r }, Cmd.none )
 
 
 view : Model -> Browser.Document Msg
@@ -85,8 +96,28 @@ view model =
         [ div []
             [ div [] [ text (Debug.toString model) ]
             ]
+        , viewAuthProviders model.auth_providers
         ]
     }
+
+
+type alias AuthProvider =
+    { id : Int
+    , auth_type : String
+    , position : Int
+    }
+
+
+authProviderDecoder : Json.Decode.Decoder AuthProvider
+authProviderDecoder =
+    Json.Decode.map3 AuthProvider
+        (Json.Decode.field "id" Json.Decode.int)
+        (Json.Decode.field "auth_type" Json.Decode.string)
+        (Json.Decode.field "position" Json.Decode.int)
+
+
+proxyURL =
+    "https://app.imsa.edu/connect/canvas/proxy"
 
 
 requestAuthProviders : Token -> Cmd Msg
@@ -97,9 +128,13 @@ requestAuthProviders token =
             [ Http.header "Authorization" ("Bearer " ++ token)
             , Http.header "Token" token
             ]
-        , url = "https://app.imsa.edu/connect/canvas/proxy"
+        , url = proxyURL ++ "/api/v1/accounts/1/authentication_providers"
         , body = Http.emptyBody
-        , expect = Http.expectString GotAuthProviders
+        , expect = Http.expectJson (RemoteData.fromResult >> GotAuthProviders) (Json.Decode.list authProviderDecoder)
         , timeout = Nothing
         , tracker = Nothing
         }
+
+viewAuthProviders : RemoteData.WebData (List AuthProvider) -> Html Msg
+viewAuthProviders providersWD =
+    div [] [ text (Debug.toString providersWD) ]
