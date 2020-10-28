@@ -66,6 +66,10 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd msg )
 update msg model =
+    let
+        _ =
+            Debug.log "msg" (Debug.toString msg)
+    in
     case msg of
         NoOp ->
             ( model, Cmd.none )
@@ -89,8 +93,11 @@ requestAuthProviders : Token -> Cmd Msg
 requestAuthProviders token =
     Http.request
         { method = "GET"
-        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
-        , url = "https://cors-anywhere.herokuapp.com/https://imsa.instructure.com/api/vi/accounts/1/authentication_providers"
+        , headers =
+            [ Http.header "Authorization" ("Bearer " ++ token)
+            , Http.header "Token" token
+            ]
+        , url = "https://app.imsa.edu/connect/canvas/proxy"
         , body = Http.emptyBody
         , expect = Http.expectString GotAuthProviders
         , timeout = Nothing
