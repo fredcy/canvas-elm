@@ -5,7 +5,7 @@ import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Http
 import Json.Decode as D
-import RemoteData exposing (WebData, RemoteData(..), fromResult)
+import RemoteData exposing (RemoteData(..), WebData, fromResult)
 
 
 type alias Flags =
@@ -135,6 +135,33 @@ requestAuthProviders token =
         , tracker = Nothing
         }
 
+
 viewAuthProviders : WebData (List AuthProvider) -> Html Msg
 viewAuthProviders providersWD =
-    div [] [ text (Debug.toString providersWD) ]
+    div []
+        [ Html.h2 [] [ text "Auth Providers" ]
+        , div [] [ text (Debug.toString providersWD) ]
+        , case providersWD of
+            Success providers ->
+                viewAuthProviderList providers
+
+            _ ->
+                div [] [ text (Debug.toString providersWD) ]
+        ]
+
+
+viewAuthProviderList : List AuthProvider -> Html Msg
+viewAuthProviderList providers =
+    let
+        viewProvider p =
+            Html.tr []
+                [ Html.td [] [ text p.auth_type ]
+                , Html.td [] [ text (String.fromInt p.id) ]
+                ]
+        viewHeader n =
+            Html.td [] [ text n ]
+    in
+    Html.table []
+        [ Html.thead [] [ Html.tr [] (List.map viewHeader ["name", "id" ]) ]
+        , Html.tbody [] (List.map viewProvider providers)
+        ]
