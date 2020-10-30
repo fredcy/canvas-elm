@@ -22,8 +22,14 @@ type alias Authentication =
     }
 
 
+type AuthState
+    = Authenticated Authentication
+    | Unauthenticated
+    | AuthError D.Error
+
+
 type alias Model =
-    { authentication : Result D.Error Authentication
+    { authentication : AuthState
     , auth_providers : WebData (List AuthProvider)
     }
 
@@ -42,23 +48,20 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         authResult =
-            D.decodeValue flagsDecoder flags
+            case D.decodeValue flagsDecoder flags of
+                Ok authInfo ->
+                    Authenticated authInfo
 
-        cmd =
+                Err error ->
+                    AuthError error
+
+        ( auth_providers, cmd ) =
             case authResult of
-                Ok auth ->
-                    requestAuthProviders auth.access_token
+                Authenticated authInfo ->
+                    ( Loading, requestAuthProviders authInfo.access_token )
 
-                Err _ ->
-                    Cmd.none
-
-        auth_providers =
-            case authResult of
-                Ok _ ->
-                    Loading
-
-                Err _ ->
-                    NotAsked
+                _ ->
+                    ( NotAsked, Cmd.none )
     in
     ( { authentication = authResult, auth_providers = auth_providers }, cmd )
 
@@ -77,16 +80,33 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd msg )
 update msg model =
-    let
-        _ =
-            Debug.log "msg" (Debug.toString msg)
-    in
-    case msg of
+    case Debug.log "msg" msg of
         NoOp ->
             ( model, Cmd.none )
 
         GotAuthProviders r ->
+            let
+                _ =
+                    checkAuthorization r
+            in
             ( { model | auth_providers = r }, Cmd.none )
+
+
+checkAuthorization responseWD =
+    case responseWD of
+        Failure (Http.BadStatus code) ->
+            let
+                _ =
+                    Debug.log "HTTP response code" code
+            in
+            Cmd.none
+
+        _ ->
+            let
+                _ =
+                    Debug.log "other response" responseWD
+            in
+            Cmd.none
 
 
 view : Model -> Browser.Document Msg
@@ -117,7 +137,11 @@ authProviderDecoder =
 
 
 proxyURL =
-    "https://app.imsa.edu/connect/canvas/proxy"
+    "http://localhost:8081"
+
+
+
+--    "https://app.imsa.edu/connect/canvas/proxy"
 
 
 requestAuthProviders : Token -> Cmd Msg
@@ -125,8 +149,9 @@ requestAuthProviders token =
     Http.request
         { method = "GET"
         , headers =
-            [ Http.header "Authorization" ("Bearer " ++ token)
-            , Http.header "Token" token
+            [{- Http.header "Authorization" ("Bearer " ++ token)
+                -            , Http.header "Token" token
+             -}
             ]
         , url = proxyURL ++ "/api/v1/accounts/1/authentication_providers"
         , body = Http.emptyBody
@@ -158,10 +183,11 @@ viewAuthProviderList providers =
                 [ Html.td [] [ text p.auth_type ]
                 , Html.td [] [ text (String.fromInt p.id) ]
                 ]
+
         viewHeader n =
-            Html.td [] [ text n ]
+            Html.th [] [ text n ]
     in
     Html.table []
-        [ Html.thead [] [ Html.tr [] (List.map viewHeader ["name", "id" ]) ]
+        [ Html.thead [] [ Html.tr [] (List.map viewHeader [ "name", "id" ]) ]
         , Html.tbody [] (List.map viewProvider providers)
         ]
